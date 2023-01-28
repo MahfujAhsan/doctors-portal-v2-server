@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config();
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY)
 const jwt = require('jsonwebtoken');
 const port = process.env.PORT || 5000;
 
@@ -89,6 +90,7 @@ async function run() {
                 {
                     $project: {
                         name: 1,
+                        price: 1,
                         slots: 1,
                         booked: {
                             $map: {
@@ -102,6 +104,7 @@ async function run() {
                 {
                     $project: {
                         name: 1,
+                        price: 1,
                         slots: {
                             $setDifference: ['$slots', '$booked']
                         }
@@ -109,6 +112,13 @@ async function run() {
                 }
             ]).toArray();
             res.send(options);
+        });
+
+        app.get('/bookings/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: ObjectId(id) };
+            const booking = await bookingsCollection.findOne(query);
+            res.send(booking);
         })
 
         app.post('/bookings', async (req, res) => {
@@ -187,9 +197,22 @@ async function run() {
             res.send(result);
         });
 
+        // temporarily to update price field on appointment options
+        // app.get('/add-price', async (req, res) => {
+        //     const filter = {};
+        //     const options = { upsert: true };
+        //     const updatedDoc = {
+        //         $set: {
+        //             price: 99
+        //         }
+        //     };
+        //     const result = await appointmentOptionCollection.updateMany(filter, updatedDoc, options);
+        //     res.send(result);
+        // })
+
         app.get('/appointmentSpecialty', async (req, res) => {
             const query = {};
-            const result = await appointmentOptionCollection.find(query).project({name: 1}).toArray();
+            const result = await appointmentOptionCollection.find(query).project({ name: 1 }).toArray();
             res.send(result);
         });
 
@@ -207,9 +230,26 @@ async function run() {
 
         app.delete('/doctors/:id', verifyJWT, verifyAdmin, async (req, res) => {
             const id = req.params.id;
-            const filter = { _id: ObjectId(id)};
+            const filter = { _id: ObjectId(id) };
             const result = await doctorsCollection.deleteOne(filter);
             return res.send(result);
+        });
+
+        app.post('/create-payment-intent', async (req, res) => {
+            const booking = req.body;
+            const price = booking.price;
+            const amount = price * 100;
+
+            const paymentIntent = await stripe.paymentIntents.create({
+                currency: 'usd',
+                amount: amount,
+                "payment_method_types": [
+                    "card"
+                ]
+            });
+            // res.send({
+            //     clientSecret: paymentIntent.
+            // })
         })
 
 
